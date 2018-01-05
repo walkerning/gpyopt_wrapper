@@ -134,4 +134,5 @@ def run(p_id, gpu_id, args):
     return test_loss
 
 eps = 1e-2
-num_exp = 10
+max_exp = 10
+normalize_Y = False

@@ -30,8 +30,11 @@ class Manager(object):
         assert "domains_def" in self.module
 
         self.num_opt_arg = len(self.module["domains_def"])
+
         self.max_exp = max_exp or self.module.get("max_exp", 20)
         self.eps = eps or self.module.get("eps", 1e-2)
+        self.normalize_Y = self.module.get("normalize_Y", True)
+
         self.num_processes = num_processes
         self.gpu_ids = gpu_ids
         self.gpus = itertools.cycle(gpu_ids)
@@ -55,6 +58,8 @@ class Manager(object):
 
         self.num_start_exp = 0
         self.handle_signal()
+
+    def start(self):
         if self.Y is None:
             if "Y_init" in self.module and "X_init" in self.module:
                 self.X = self.module["X_init"]
@@ -74,7 +79,7 @@ class Manager(object):
                                                   X=self.X, Y=self.Y, acquisition_type='EI',
                                                   acquisition_optimizer_type='lbfgs',
                                                   evaluator_type='local_penalization',
-                                                  batch_size=num_processes)
+                                                  batch_size=self.num_processes)
         self.init_opt(opt)
         first_batch_X = opt.suggest_next_locations()
         self.run_batch(first_batch_X)
@@ -86,6 +91,7 @@ class Manager(object):
 
     def init_opt(self, opt):
         opt.context = None
+        opt.num_acquisitions = 0
 
     def handle_signal(self):
         def signal_handler(sig, frame):
@@ -177,7 +183,7 @@ class Manager(object):
             opt = GPyOpt.methods.BayesianOptimization(f=None, domain=self.domain,
                                                       constraints=self.constraints, cost_withGradients=None, model_type='GP',
                                                       X=self.X, Y=self.Y, acquisition_type='EI',
-                                                      normalize_Y=True, exact_feval=False, acquisition_optimizer_type='lbfgs',
+                                                      normalize_Y=self.normalize_Y, exact_feval=False, acquisition_optimizer_type='lbfgs',
                                                       model_update_interval=1, evaluator_type='local_penalization',
                                                       batch_size=2, num_cores=1)
             new_args = self.compute_next(opt)[0]
@@ -249,3 +255,25 @@ class Manager(object):
         
         evaluator.acquisition.update_batches(None,None,None)
         return X_batch[cur_len:]
+
+    def plot_convergence(self, filename=None):
+        opt = GPyOpt.methods.BayesianOptimization(f=None, domain=self.domain,
+                                                  constraints=self.constraints, cost_withGradients=None, model_type='GP',
+                                                  X=self.X, Y=self.Y, acquisition_type='EI',
+                                                  normalize_Y=self.normalize_Y, exact_feval=False, acquisition_optimizer_type='lbfgs',
+                                                  model_update_interval=1, evaluator_type='local_penalization',
+                                                  batch_size=2, num_cores=1)
+        opt._compute_results()
+        return opt.plot_convergence(filename=filename)
+
+    def plot_acquisition(self,filename=None):
+        X = self.X[np.where(self.Y < np.inf)[0]]
+        Y = self.Y[np.where(self.Y < np.inf)[0]]
+        opt = GPyOpt.methods.BayesianOptimization(f=None, domain=self.domain,
+                                                  constraints=self.constraints, cost_withGradients=None, model_type='GP',
+                                                  X=X, Y=Y, acquisition_type='EI',
+                                                  normalize_Y=self.normalize_Y, exact_feval=False, acquisition_optimizer_type='lbfgs',
+                                                  model_update_interval=1, evaluator_type='local_penalization',
+                                                  batch_size=2, num_cores=1)
+        opt._compute_results()
+        return opt.plot_acquisition(filename=filename)
